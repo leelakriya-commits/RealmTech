@@ -3,6 +3,11 @@ variable "prefix" {
     type = string  
 }
 
+
+variable "function_app_name" {
+  default = "realtech-func-demo"
+  type    = string
+}
 resource "azurerm_resource_group" "rg" {
   name = "${var.prefix}-rg"
   location = "canadacentral"
@@ -31,20 +36,42 @@ resource "azurerm_app_service_slot" "slot" {
   app_service_plan_id = "${azurerm_app_service_plan.asp.id}"
   app_service_name    = "${azurerm_app_service.as.name}"
 }
-
-resource "azurerm_app_service_source_control" "scm" {
-  app_id   = azurerm_app_service.as.id
-  repo_url = "https://github.com/piyushsachdeva/tf-sample-bg"
-  branch   = "master"
+# 🔹 Storage account for Function App
+resource "azurerm_storage_account" "storage" {
+  name                     = lower("${var.prefix}stor123")   # force lowercase
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
+# 🔹 Service plan for Function App (Consumption)
+resource "azurerm_service_plan" "plan" {
+  name                = "${var.prefix}-func-plan"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  os_type             = "Linux"
+  sku_name            = "Y1" # Y1 = Consumption plan for Functions
 }
 
-resource "azurerm_app_service_source_control_slot" "scm1" {
-  slot_id   = azurerm_app_service_slot.slot.id
-  repo_url = "https://github.com/piyushsachdeva/tf-sample-bg"
-  branch   = "appServiceSlot_Working_DO_NOT_MERGE"
-}
+# Function App
+resource "azurerm_linux_function_app" "function" {
+  name                       = var.function_app_name
+  location                   = azurerm_resource_group.rg.location
+  resource_group_name        = azurerm_resource_group.rg.name
+  service_plan_id            = azurerm_service_plan.plan.id
+  storage_account_name       = azurerm_storage_account.storage.name
+  storage_account_access_key = azurerm_storage_account.storage.primary_access_key
+  functions_extension_version = "~4"
 
-resource "azurerm_web_app_active_slot" "active" {
-  slot_id = azurerm_app_service_slot.slot.id
+  site_config {
+    application_stack {
+      node_version = "18"
+    }
+  }
 
+  app_settings = {
+    "AzureWebJobsStorage"         = azurerm_storage_account.storage.primary_connection_string
+    "FUNCTIONS_EXTENSION_VERSION" = "~4"
+    "FUNCTIONS_WORKER_RUNTIME"    = "node"
+  }
 }
