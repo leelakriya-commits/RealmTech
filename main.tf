@@ -75,3 +75,29 @@ resource "azurerm_linux_function_app" "function" {
     "FUNCTIONS_WORKER_RUNTIME"    = "node"
   }
 }
+# Service Bus Namespace (for context)
+resource "azurerm_servicebus_namespace" "sb" {
+  name                = "${var.prefix}-sbns"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku                 = "Standard"
+}
+
+# Updated Service Bus Topic
+resource "azurerm_servicebus_topic" "topic" {
+  name         = "clitopic"
+  namespace_id = azurerm_servicebus_namespace.sb.id
+
+  partitioning_enabled        = true
+  batched_operations_enabled = true
+  express_enabled            = false
+}
+
+# Service Bus Subscription (no change here)
+resource "azurerm_servicebus_subscription" "sub" {
+  name                = "cliSubscription"
+  topic_id            = azurerm_servicebus_topic.topic.id
+  max_delivery_count  = 10
+  lock_duration       = "PT1M"
+}
+
